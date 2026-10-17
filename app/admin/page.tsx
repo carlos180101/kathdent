@@ -19,7 +19,6 @@ export default function AdminDashboard() {
   const [archivo, setArchivo] = useState<File | null>(null)
   const [fechaHoy, setFechaHoy] = useState("")
   
-  // Nuevos estados para Odontograma y PDF
   const [dienteSeleccionado, setDienteSeleccionado] = useState<number | null>(null)
   const [modoImpresion, setModoImpresion] = useState("receta") 
   const router = useRouter()
@@ -59,7 +58,7 @@ export default function AdminDashboard() {
   }
 
   const eliminarPaciente = async (id: string) => {
-    if(confirm("⚠️ ATENCIÓN: ¿Borrar expediente permanentemente? Se eliminará su historial, odontograma y pagos de la base de datos.")) {
+    if(confirm("⚠️ ATENCIÓN: ¿Borrar expediente permanentemente?")) {
       await supabase.from("pacientes").delete().eq("id", id)
       setPacienteActivo(null)
       cargarDatos()
@@ -75,14 +74,16 @@ export default function AdminDashboard() {
     else {
       alert("Expediente generado exitosamente")
       cargarDatos()
-      if(data && data[0]) { cargarOdontogramaYArchivos(data[0].id); setTab("odontograma") }
+      if(data && data[0]) { cargarOdontogramaYArchivos(data[0].id); setTab("pacientes") }
     }
   }
 
   const cargarOdontogramaYArchivos = async (pacienteId: string) => {
     const p = pacientes.find(x => x.id === pacienteId)
-    setPacienteActivo(p)
-    if (!p) { setOdontograma([]); setPagos([]); setEditando(false); return }
+    setPacienteActivo(p || null)
+    setEditando(false)
+    if (!p) { setOdontograma([]); setPagos([]); return }
+    
     setDatosEdicion({ id: p.id, nombre: p.nombre_completo, telefono: p.telefono, alergias: p.alergias, historial: p.historial_medico })
     const { data: odData } = await supabase.from("odontograma").select("*").eq("paciente_id", pacienteId)
     if (odData) setOdontograma(odData)
@@ -100,23 +101,26 @@ export default function AdminDashboard() {
     else { setNuevoPago({ concepto: "", monto: "", tipo: "cargo" }); cargarOdontogramaYArchivos(pacienteActivo.id) }
   }
 
-  // LOGICA BLINDADA PARA GUARDAR EL ODONTOGRAMA
+  // ODONTOGRAMA BLINDADO (Sin usar .match problemático)
   const cambiarEstadoDiente = async (diente: number, estado: string) => {
     if (!pacienteActivo) return
     
-    // 1. Reflejar en pantalla de inmediato
     setOdontograma(prev => {
-      const filtrado = prev.filter(o => o.diente !== diente)
-      if (estado === 'sano') return filtrado
-      return [...filtrado, { paciente_id: pacienteActivo.id, diente, estado }]
+      const f = prev.filter(o => o.diente !== diente)
+      if (estado === 'sano') return f
+      return [...f, { paciente_id: pacienteActivo.id, diente, estado }]
     })
     setDienteSeleccionado(null)
 
-    // 2. Guardar en Base de Datos (Borrando y creando para evitar trabas)
-    await supabase.from("odontograma").delete().match({ paciente_id: pacienteActivo.id, diente })
-    if (estado !== 'sano') {
-      const { error } = await supabase.from("odontograma").insert([{ paciente_id: pacienteActivo.id, diente, estado }])
-      if(error) alert("Hubo un error al guardar en la nube: " + error.message)
+    if (estado === 'sano') {
+      const { error } = await supabase.from("odontograma").delete().eq("paciente_id", pacienteActivo.id).eq("diente", diente)
+      if (error) alert("Error en la nube: " + error.message)
+    } else {
+      const { error } = await supabase.from("odontograma").upsert(
+        { paciente_id: pacienteActivo.id, diente, estado }, 
+        { onConflict: "paciente_id,diente" }
+      )
+      if (error) alert("Error en la nube: " + error.message)
     }
   }
 
@@ -136,8 +140,6 @@ export default function AdminDashboard() {
     if(confirm("¿Borrar esta cita permanentemente?")) { await supabase.from("citas").delete().eq("id", id); cargarDatos() }
   }
 
-  const activarEdicion = () => setEditando(true)
-
   const dientesSuperiores = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]
   const dientesInferiores = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]
 
@@ -147,24 +149,24 @@ export default function AdminDashboard() {
     if (est === 'obturacion') return "bg-blue-100 border-blue-500 text-blue-700 shadow-inner"
     if (est === 'sarro') return "bg-yellow-100 border-yellow-500 text-yellow-700 shadow-inner"
     if (est === 'extraccion') return "bg-slate-800 border-slate-900 text-slate-100 line-through opacity-70"
-    return "bg-white border-slate-300 text-slate-400 hover:border-slate-400"
+    return "bg-white border-slate-300 text-slate-400"
   }
   const balanceTotal = pagos.reduce((acc, p) => p.tipo === 'cargo' ? acc + Number(p.monto) : acc - Number(p.monto), 0)
 
   return (
     <div className="w-full relative">
       
-      {/* MODAL TÁCTIL PARA CELULARES (ODONTOGRAMA) */}
+      {/* MODAL TÁCTIL PARA CELULARES Y PC (ODONTOGRAMA) */}
       {dienteSeleccionado && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl animate-fade-in">
-            <h3 className="text-3xl font-black text-slate-900 mb-6">Diente {dienteSeleccionado}</h3>
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-sm text-center shadow-2xl animate-fade-in">
+            <h3 className="text-2xl md:text-3xl font-black text-slate-900 mb-6">Pieza {dienteSeleccionado}</h3>
             <div className="space-y-3">
-              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'sano')} className="w-full bg-slate-100 text-slate-700 font-bold p-4 rounded-xl hover:bg-slate-200">⚪ Marcar como Sano</button>
-              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'caries')} className="w-full bg-red-50 text-red-600 font-bold p-4 rounded-xl hover:bg-red-100">🔴 Marcar Caries</button>
-              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'sarro')} className="w-full bg-yellow-50 text-yellow-700 font-bold p-4 rounded-xl hover:bg-yellow-100">🟡 Marcar Sarro / Placa</button>
-              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'obturacion')} className="w-full bg-blue-50 text-blue-600 font-bold p-4 rounded-xl hover:bg-blue-100">🔵 Marcar Obturación</button>
-              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'extraccion')} className="w-full bg-slate-800 text-slate-300 font-bold p-4 rounded-xl hover:bg-slate-700">⚫ Marcar Extracción</button>
+              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'sano')} className="w-full bg-slate-100 text-slate-700 font-bold p-3 md:p-4 rounded-xl hover:bg-slate-200">⚪ Sano (Borrar marcas)</button>
+              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'caries')} className="w-full bg-red-50 text-red-600 font-bold p-3 md:p-4 rounded-xl hover:bg-red-100">🔴 Caries</button>
+              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'sarro')} className="w-full bg-yellow-50 text-yellow-700 font-bold p-3 md:p-4 rounded-xl hover:bg-yellow-100">🟡 Sarro / Placa</button>
+              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'obturacion')} className="w-full bg-blue-50 text-blue-600 font-bold p-3 md:p-4 rounded-xl hover:bg-blue-100">🔵 Obturación</button>
+              <button onClick={()=>cambiarEstadoDiente(dienteSeleccionado, 'extraccion')} className="w-full bg-slate-800 text-slate-300 font-bold p-3 md:p-4 rounded-xl hover:bg-slate-700">⚫ Extracción</button>
             </div>
             <button onClick={()=>setDienteSeleccionado(null)} className="mt-6 text-slate-500 font-bold hover:text-slate-700 transition underline">✖ Cancelar</button>
           </div>
@@ -219,7 +221,7 @@ export default function AdminDashboard() {
               <p><span className="font-bold text-red-600">Alergias:</span> {pacienteActivo?.alergias || "Ninguna reportada"}</p>
               <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 mt-4">
                 <p className="font-black text-slate-800 mb-2">Historial Médico:</p>
-                <p className="whitespace-pre-wrap font-medium text-slate-700">{pacienteActivo?.historial_medico}</p>
+                <p className="whitespace-pre-wrap font-medium text-slate-700">{pacienteActivo?.historial_medico || "Sin historial."}</p>
               </div>
             </div>
             <div className="mb-8">
@@ -243,7 +245,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* VISTA NORMAL DE PANTALLA */}
+      {/* PANTALLA PRINCIPAL */}
       <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row print:hidden w-full overflow-x-hidden">
         
         <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col p-4 md:p-6 shadow-2xl z-20 sticky top-0 md:h-screen">
@@ -260,6 +262,7 @@ export default function AdminDashboard() {
         </aside>
 
         <main className="flex-1 p-4 md:p-10 overflow-y-auto w-full max-w-full">
+          
           {tab === "citas" && (
              <div className="w-full">
                <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-6 md:mb-8">Control de Citas</h2>
@@ -282,30 +285,77 @@ export default function AdminDashboard() {
 
           {tab === "pacientes" && (
             <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-              <div>
-                <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 md:mb-6">Buscador</h2>
+              
+              {/* LADO IZQUIERDO: Buscador General */}
+              <div className="space-y-6">
                 <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200">
+                  <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-4">Buscar Paciente</h2>
                   <select value={pacienteActivo?.id || ""} onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full p-3 md:p-4 rounded-xl border-2 border-slate-100 bg-slate-50 font-bold focus:border-blue-600">
-                    <option value="">Seleccione paciente...</option>
+                    <option value="">+ Seleccione o cree uno nuevo...</option>
                     {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre_completo}</option>)}
                   </select>
-
-                  {pacienteActivo && (
-                    <div className="flex gap-2 mt-4">
-                      <button onClick={activarEdicion} className="flex-1 bg-slate-100 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-200 transition text-sm md:text-base border border-slate-200">✏️ Editar</button>
-                      <button onClick={() => eliminarPaciente(pacienteActivo.id)} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition text-sm md:text-base border border-red-200">🗑️ Borrar</button>
-                      <button onClick={() => {setModoImpresion("expediente"); setTimeout(()=>window.print(), 100)}} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition text-sm md:text-base shadow-md">📄 Exportar PDF</button>
-                    </div>
-                  )}
                 </div>
+
+                {/* Si NO hay paciente seleccionado, mostramos "Nuevo Expediente" */}
+                {!pacienteActivo && (
+                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200">
+                    <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-4">Crear Nuevo Expediente</h2>
+                    <form onSubmit={registrarPaciente} className="space-y-4">
+                      <input required placeholder="Nombre Completo" value={nuevoPaciente.nombre} onChange={e=>setNuevoPaciente({...nuevoPaciente, nombre: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
+                      <input placeholder="Teléfono" value={nuevoPaciente.telefono} onChange={e=>setNuevoPaciente({...nuevoPaciente, telefono: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
+                      <input placeholder="Alergias (Ej. Penicilina)" value={nuevoPaciente.alergias} onChange={e=>setNuevoPaciente({...nuevoPaciente, alergias: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium text-red-600"/>
+                      <textarea placeholder="Historial Médico y Observaciones" value={nuevoPaciente.historial} onChange={e=>setNuevoPaciente({...nuevoPaciente, historial: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium h-24"></textarea>
+                      <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition shadow-md">Crear Expediente</button>
+                    </form>
+                  </div>
+                )}
+
+                {/* Si SÍ hay paciente, mostramos su Info y botones de control */}
+                {pacienteActivo && !editando && (
+                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-blue-200 bg-blue-50/30">
+                    <h2 className="text-xl md:text-2xl font-black text-blue-900 mb-2">{pacienteActivo.nombre_completo}</h2>
+                    <p className="text-slate-600 font-medium mb-4">📞 {pacienteActivo.telefono || "Sin teléfono"}</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <button onClick={()=>setEditando(true)} className="flex-1 bg-white text-slate-700 font-bold py-3 px-4 rounded-xl hover:bg-slate-100 transition border border-slate-200 shadow-sm text-sm">✏️ Editar Info</button>
+                      <button onClick={() => {setModoImpresion("expediente"); setTimeout(()=>window.print(), 100)}} className="flex-1 bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 transition shadow-md text-sm">📄 Exportar PDF</button>
+                      <button onClick={() => eliminarPaciente(pacienteActivo.id)} className="w-full md:w-auto bg-red-50 text-red-600 font-bold py-3 px-4 rounded-xl hover:bg-red-100 transition border border-red-200 text-sm mt-2 md:mt-0">🗑️ Borrar</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulario de Edición */}
+                {pacienteActivo && editando && (
+                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-blue-400">
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-xl font-black text-blue-600">Editando Datos</h2>
+                      <button onClick={()=>setEditando(false)} className="text-slate-400 font-bold text-sm">✖ Cancelar</button>
+                    </div>
+                    <form onSubmit={guardarEdicionPaciente} className="space-y-4">
+                      <input required value={datosEdicion.nombre} onChange={e=>setDatosEdicion({...datosEdicion, nombre: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-blue-600 font-medium"/>
+                      <input value={datosEdicion.telefono} onChange={e=>setDatosEdicion({...datosEdicion, telefono: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-blue-600 font-medium"/>
+                      <input value={datosEdicion.alergias} onChange={e=>setDatosEdicion({...datosEdicion, alergias: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-blue-600 font-medium text-red-600"/>
+                      <textarea value={datosEdicion.historial} onChange={e=>setDatosEdicion({...datosEdicion, historial: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-blue-600 font-medium h-24"></textarea>
+                      <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700">💾 Guardar Cambios</button>
+                    </form>
+                  </div>
+                )}
               </div>
 
+              {/* LADO DERECHO: Archivos y Recetas (Solo si hay paciente) */}
               {pacienteActivo && (
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 md:mb-6">Receta Médica</h2>
+                <div className="space-y-6">
+                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200">
+                    <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-4">Radiografías / Archivos</h2>
+                    <div className="p-6 border-2 border-dashed border-slate-300 rounded-2xl text-center hover:bg-blue-50 transition">
+                      <input type="file" onChange={(e) => setArchivo(e.target.files?.[0] || null)} className="mb-4 block w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer text-xs"/>
+                      <button onClick={subirRadiografia} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-md text-sm">☁️ Subir a Nube</button>
+                    </div>
+                  </div>
+
                   <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 space-y-4">
-                    <textarea value={recetaTexto} onChange={e=>setRecetaTexto(e.target.value)} className="w-full p-3 md:p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 text-sm md:text-base font-medium h-24 md:h-32" placeholder="Indicaciones..."></textarea>
-                    <button onClick={()=>{setModoImpresion("receta"); setTimeout(()=>window.print(), 100)}} className="w-full bg-slate-900 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-slate-800 transition shadow-md text-sm md:text-base">🖨️ Imprimir Receta</button>
+                    <h2 className="text-xl md:text-2xl font-black text-slate-900">Receta Médica</h2>
+                    <textarea value={recetaTexto} onChange={e=>setRecetaTexto(e.target.value)} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 text-sm font-medium h-32" placeholder="Indicaciones..."></textarea>
+                    <button onClick={()=>{setModoImpresion("receta"); setTimeout(()=>window.print(), 100)}} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 shadow-md text-sm">🖨️ Imprimir Receta</button>
                   </div>
                 </div>
               )}
@@ -330,13 +380,13 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {pacienteActivo && (
+                {pacienteActivo ? (
                   <div className="animate-fade-in text-center">
                     <div className="mb-8 md:mb-12">
                       <h3 className="text-slate-400 font-bold mb-4 md:mb-6 uppercase tracking-widest text-xs md:text-sm">Arcada Superior</h3>
                       <div className="flex flex-wrap justify-center gap-1 md:gap-3">
                         {dientesSuperiores.map(diente => (
-                          <div key={diente} onClick={()=>setDienteSeleccionado(diente)} className={`w-9 h-12 sm:w-11 sm:h-16 md:w-14 md:h-20 border-2 rounded-lg md:rounded-xl flex items-center justify-center font-black cursor-pointer transition text-xs md:text-base ${getDienteStyle(diente)}`}>
+                          <div key={diente} onClick={()=>setDienteSeleccionado(diente)} className={`w-9 h-12 sm:w-11 sm:h-16 md:w-14 md:h-20 border-2 rounded-lg md:rounded-xl flex items-center justify-center font-black cursor-pointer transition text-xs md:text-base hover:scale-110 ${getDienteStyle(diente)}`}>
                             {diente}
                           </div>
                         ))}
@@ -346,12 +396,16 @@ export default function AdminDashboard() {
                       <h3 className="text-slate-400 font-bold mb-4 md:mb-6 uppercase tracking-widest text-xs md:text-sm">Arcada Inferior</h3>
                       <div className="flex flex-wrap justify-center gap-1 md:gap-3">
                         {dientesInferiores.map(diente => (
-                          <div key={diente} onClick={()=>setDienteSeleccionado(diente)} className={`w-9 h-12 sm:w-11 sm:h-16 md:w-14 md:h-20 border-2 rounded-lg md:rounded-xl flex items-center justify-center font-black cursor-pointer transition text-xs md:text-base ${getDienteStyle(diente)}`}>
+                          <div key={diente} onClick={()=>setDienteSeleccionado(diente)} className={`w-9 h-12 sm:w-11 sm:h-16 md:w-14 md:h-20 border-2 rounded-lg md:rounded-xl flex items-center justify-center font-black cursor-pointer transition text-xs md:text-base hover:scale-110 ${getDienteStyle(diente)}`}>
                             {diente}
                           </div>
                         ))}
                       </div>
                     </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-10 md:py-20 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                    <p className="text-slate-500 font-medium text-sm md:text-lg">Seleccione un paciente para desplegar la ficha.</p>
                   </div>
                 )}
               </div>
