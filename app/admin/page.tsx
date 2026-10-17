@@ -17,9 +17,13 @@ export default function AdminDashboard() {
   const [nuevoPago, setNuevoPago] = useState({ concepto: "", monto: "", tipo: "cargo" })
   const [recetaTexto, setRecetaTexto] = useState("")
   const [archivo, setArchivo] = useState<File | null>(null)
+  const [fechaHoy, setFechaHoy] = useState("")
   const router = useRouter()
 
-  useEffect(() => { cargarDatos() }, [])
+  useEffect(() => { 
+    cargarDatos(); 
+    setFechaHoy(new Date().toLocaleDateString());
+  }, [])
 
   const cargarDatos = async () => {
     const { data: session } = await supabase.auth.getSession()
@@ -130,8 +134,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="w-full">
-      
-      {/* VISTA EXCLUSIVA PARA LA IMPRESORA (Recetario Oficial) */}
       <div className="hidden print:block bg-white text-black w-full max-w-4xl mx-auto p-12">
         <div className="border-b-4 border-blue-900 pb-6 mb-8 flex justify-between items-end">
           <div>
@@ -153,7 +155,7 @@ export default function AdminDashboard() {
           </div>
           <div className="text-right">
             <p className="text-sm uppercase tracking-widest text-slate-500 font-black mb-1">Fecha de Expedición</p>
-            <p className="text-xl font-bold text-slate-900">{new Date().toLocaleDateString()}</p>
+            <p className="text-xl font-bold text-slate-900">{fechaHoy}</p>
           </div>
         </div>
 
@@ -172,15 +174,12 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* VISTA NORMAL DE PANTALLA */}
       <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row print:hidden w-full overflow-x-hidden">
-        
         <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col p-4 md:p-6 shadow-2xl z-20 sticky top-0 md:h-screen">
           <div className="flex justify-between items-center mb-4 md:mb-10">
             <h1 className="text-xl md:text-2xl font-black text-white tracking-tighter">Kath<span className="text-blue-500">Dent</span></h1>
             <button onClick={() => { supabase.auth.signOut(); router.push("/") }} className="md:hidden text-red-400 font-bold p-2 text-sm bg-slate-800 rounded-lg">Salir</button>
           </div>
-          
           <nav className="flex flex-row md:flex-col gap-2 overflow-x-auto font-bold flex-1 pb-2 md:pb-0 scrollbar-hide">
             <button onClick={()=>setTab("citas")} className={`whitespace-nowrap text-sm md:text-base px-4 py-2 md:p-4 rounded-xl transition ${tab==="citas" ? "bg-blue-600 text-white shadow-md" : "bg-slate-800 md:bg-transparent hover:bg-slate-800"}`}>📅 Agenda</button>
             <button onClick={()=>setTab("pacientes")} className={`whitespace-nowrap text-sm md:text-base px-4 py-2 md:p-4 rounded-xl transition ${tab==="pacientes" ? "bg-blue-600 text-white shadow-md" : "bg-slate-800 md:bg-transparent hover:bg-slate-800"}`}>📁 Expedientes</button>
@@ -386,14 +385,12 @@ export default function AdminDashboard() {
                             Abono (Pago)
                           </label>
                         </div>
-                        <input required placeholder="Concepto (Ej. Extracción)" value={nuevoPago.concepto} onChange={e=>setNuevoPago({...nuevoPago, concepto: e.target.value})} className="w-full p-3 md:p-4 rounded-xl border border-slate-200 outline-none focus:border-blue-600 font-medium text-sm md:text-base"/>
-                        
+                        <input required placeholder="Concepto" value={nuevoPago.concepto} onChange={e=>setNuevoPago({...nuevoPago, concepto: e.target.value})} className="w-full p-3 md:p-4 rounded-xl border border-slate-200 outline-none focus:border-blue-600 font-medium text-sm md:text-base"/>
                         <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition">
                           <span className="pl-4 pr-1 font-black text-slate-400 text-lg">$</span>
                           <input required type="number" step="0.01" min="0" placeholder="0.00" value={nuevoPago.monto} onChange={e=>setNuevoPago({...nuevoPago, monto: e.target.value})} className="w-full p-3 md:p-4 bg-transparent outline-none font-black text-base md:text-lg"/>
                         </div>
-
-                        <button type="submit" className={`w-full text-white font-bold py-3 md:py-4 rounded-xl transition shadow-md text-sm md:text-base mt-2 ${nuevoPago.tipo === 'cargo' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                        <button type="submit" className={`w-full text-white font-bold py-3 md:py-4 rounded-xl transition shadow-md text-sm md:text-base ${nuevoPago.tipo === 'cargo' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
                           Registrar {nuevoPago.tipo === 'cargo' ? 'Cargo' : 'Abono'}
                         </button>
                       </form>
