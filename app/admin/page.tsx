@@ -11,6 +11,9 @@ export default function AdminDashboard() {
   const [odontograma, setOdontograma] = useState<any[]>([])
 
   const [nuevoPaciente, setNuevoPaciente] = useState({ nombre: "", telefono: "", alergias: "", historial: "" })
+  const [editando, setEditando] = useState(false)
+  const [datosEdicion, setDatosEdicion] = useState({ id: "", nombre: "", telefono: "", alergias: "", historial: "" })
+
   const [archivo, setArchivo] = useState<File | null>(null)
   const router = useRouter()
 
@@ -30,65 +33,96 @@ export default function AdminDashboard() {
   const registrarPaciente = async (e: any) => {
     e.preventDefault()
     const { error } = await supabase.from("pacientes").insert([{
-      nombre_completo: nuevoPaciente.nombre,
-      telefono: nuevoPaciente.telefono,
-      alergias: nuevoPaciente.alergias,
-      historial_medico: nuevoPaciente.historial
+      nombre_completo: nuevoPaciente.nombre, telefono: nuevoPaciente.telefono,
+      alergias: nuevoPaciente.alergias, historial_medico: nuevoPaciente.historial
     }])
-
-    if (error) {
-      alert("Error en Supabase: " + error.message)
-    } else {
-      alert("¡Expediente de " + nuevoPaciente.nombre + " creado con éxito!")
+    if (error) alert("Error: " + error.message)
+    else {
+      alert("¡Expediente creado con éxito!")
       setNuevoPaciente({ nombre: "", telefono: "", alergias: "", historial: "" })
-      cargarDatos() // Refresca la lista instantáneamente
+      cargarDatos()
+    }
+  }
+
+  const guardarEdicionPaciente = async (e: any) => {
+    e.preventDefault()
+    const { error } = await supabase.from("pacientes").update({
+      nombre_completo: datosEdicion.nombre, telefono: datosEdicion.telefono,
+      alergias: datosEdicion.alergias, historial_medico: datosEdicion.historial
+    }).eq("id", datosEdicion.id)
+
+    if(error) alert("Error al actualizar: " + error.message)
+    else {
+      alert("¡Datos actualizados correctamente!")
+      setEditando(false)
+      cargarDatos()
+    }
+  }
+
+  const crearExpedienteDesdeCita = async (cita: any) => {
+    const { data, error } = await supabase.from("pacientes").insert([{
+      nombre_completo: cita.nombre_paciente || "Sin Nombre",
+      telefono: cita.telefono || "",
+      alergias: "No reportadas",
+      historial_medico: "Cita original: " + cita.motivo
+    }]).select()
+
+    if(error) alert("Error: " + error.message)
+    else {
+      alert("Expediente generado exitosamente para " + cita.nombre_paciente)
+      cargarDatos()
+      if(data && data[0]) {
+         cargarOdontogramaYArchivos(data[0].id)
+         setTab("odontograma")
+      }
     }
   }
 
   const cargarOdontogramaYArchivos = async (pacienteId: string) => {
     const p = pacientes.find(x => x.id === pacienteId)
     setPacienteActivo(p)
-    if (!p) return setOdontograma([])
-
+    if (!p) {
+       setOdontograma([])
+       setEditando(false)
+       return
+    }
     const { data } = await supabase.from("odontograma").select("*").eq("paciente_id", pacienteId)
     if (data) setOdontograma(data)
+    
+    setDatosEdicion({ id: p.id, nombre: p.nombre_completo, telefono: p.telefono, alergias: p.alergias, historial: p.historial_medico })
   }
+
+  const activarEdicion = () => setEditando(true)
 
   const cambiarEstadoDiente = async (diente: number, estado: string) => {
     if (!pacienteActivo) return alert("Selecciona un paciente primero")
-
-    // Cambia el color en la pantalla al instante
-    setOdontograma(prev => {
-      const filtrado = prev.filter(o => o.diente !== diente)
-      return [...filtrado, { paciente_id: pacienteActivo.id, diente, estado }]
-    })
-
-    // Guarda en la base de datos
-    await supabase.from("odontograma").upsert(
-      { paciente_id: pacienteActivo.id, diente, estado },
-      { onConflict: "paciente_id,diente" }
-    )
+    setOdontograma(prev => [...prev.filter(o => o.diente !== diente), { paciente_id: pacienteActivo.id, diente, estado }])
+    await supabase.from("odontograma").upsert({ paciente_id: pacienteActivo.id, diente, estado }, { onConflict: "paciente_id,diente" })
   }
 
   const subirRadiografia = async () => {
-    if (!archivo || !pacienteActivo) return alert("Selecciona un paciente en la lista y adjunta un archivo.")
+    if (!archivo || !pacienteActivo) return alert("Selecciona paciente y archivo.")
     const ruta = `${pacienteActivo.id}/${Date.now()}_${archivo.name}`
     const { error } = await supabase.storage.from("radiografias").upload(ruta, archivo)
-    if (error) alert("Error al subir archivo: " + error.message)
-    else { alert("¡Imagen anexada al expediente!"); setArchivo(null); }
+    if (error) alert("Error: " + error.message)
+    else { alert("¡Imagen anexada!"); setArchivo(null); }
   }
-
-  const eliminarCita = async (id: string) => { if(confirm('¿Borrar esta cita permanentemente?')) { await supabase.from('citas').delete().eq('id', id); cargarDatos() } }
 
   const actualizarEstadoCita = async (id: string, nuevoEstado: string) => {
     await supabase.from("citas").update({ estado: nuevoEstado }).eq("id", id)
     cargarDatos()
   }
+  
+  const eliminarCita = async (id: string) => {
+    if(confirm("¿Estás seguro de borrar esta cita permanentemente?")) {
+      await supabase.from("citas").delete().eq("id", id)
+      cargarDatos()
+    }
+  }
 
   const dientesSuperiores = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]
   const dientesInferiores = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]
 
-  // Lógica de colores según estado guardado
   const getDienteStyle = (diente: number) => {
     const est = odontograma.find(o => o.diente === diente)?.estado || 'sano'
     if (est === 'caries') return "bg-red-100 border-red-500 text-red-700 shadow-inner"
@@ -99,7 +133,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* MENU LATERAL */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col p-6 shadow-2xl z-10 sticky top-0 h-screen">
         <h1 className="text-2xl font-black text-white mb-10 tracking-tighter">Kath<span className="text-blue-500">Dent</span> ERP</h1>
         <nav className="space-y-3 font-bold flex-1">
@@ -110,24 +143,24 @@ export default function AdminDashboard() {
         <button onClick={() => { supabase.auth.signOut(); router.push("/") }} className="p-4 text-red-400 hover:bg-slate-800 rounded-xl font-bold text-left">Cerrar Sesión</button>
       </aside>
 
-      {/* CONTENIDO CENTRAL */}
       <main className="flex-1 p-10 overflow-y-auto">
         {tab === "citas" && (
-          <div className="max-w-5xl">
+          <div className="max-w-6xl">
             <h2 className="text-3xl font-black text-slate-900 mb-8">Control de Citas</h2>
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 space-y-4">
               {citas.length === 0 ? <p className="text-slate-500 font-medium">No hay citas registradas aún.</p> : citas.map(cita => (
-                <div key={cita.id} className="flex justify-between items-center p-6 border border-slate-100 hover:bg-slate-50 transition rounded-2xl">
+                <div key={cita.id} className="flex flex-col xl:flex-row justify-between items-start xl:items-center p-6 border border-slate-100 hover:bg-slate-50 transition rounded-2xl gap-4">
                   <div>
-                    <p className="font-black text-xl text-slate-900">{cita.nombre_paciente || 'Paciente Sin Nombre'} <span className="text-sm font-medium text-slate-500 ml-2">📞 {cita.telefono || 'Sin Tel.'}</span></p><p className="font-bold text-md text-slate-700 mt-2">🗓️ {new Date(cita.fecha_hora).toLocaleString()}</p>
+                    <p className="font-black text-xl text-slate-900">{cita.nombre_paciente || 'Paciente Sin Nombre'} <span className="text-sm font-medium text-slate-500 ml-2">📞 {cita.telefono || 'Sin Tel.'}</span></p>
+                    <p className="font-bold text-md text-slate-700 mt-2">🗓️ {new Date(cita.fecha_hora).toLocaleString()}</p>
                     <p className="text-slate-600 font-medium mt-1">Tratamiento: <span className="text-blue-600 font-bold">{cita.motivo}</span></p>
                     <span className={`text-xs font-black uppercase mt-3 inline-block px-3 py-1 rounded-full ${cita.estado === 'pendiente' ? 'bg-amber-100 text-amber-700' : cita.estado === 'confirmada' ? 'bg-emerald-100 text-emerald-700' : cita.estado === 'cancelada' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{cita.estado}</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => crearExpedienteDesdeCita(cita)} className="bg-purple-50 text-purple-600 px-4 py-2 rounded-lg font-bold hover:bg-purple-100 transition shadow-sm border border-purple-200">📋 Generar Expediente</button>
                     <button onClick={() => actualizarEstadoCita(cita.id, 'confirmada')} className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-lg font-bold hover:bg-emerald-100 transition">Confirmar</button>
                     <button onClick={() => actualizarEstadoCita(cita.id, 'completada')} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition">Completar</button>
-                    <button onClick={() => actualizarEstadoCita(cita.id, 'cancelada')} className="bg-red-50 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-100 transition">Cancelar</button>
-                    <button onClick={() => eliminarCita(cita.id)} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition shadow-md">🗑️ Borrar</button>
+                    <button onClick={() => actualizarEstadoCita(cita.id, 'cancelada')} className="bg-orange-50 text-orange-600 px-4 py-2 rounded-lg font-bold hover:bg-orange-100 transition">Cancelar</button>
                   </div>
                 </div>
               ))}
@@ -138,30 +171,55 @@ export default function AdminDashboard() {
         {tab === "pacientes" && (
           <div className="max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div>
-              <h2 className="text-3xl font-black text-slate-900 mb-6">Nuevo Expediente</h2>
-              <form onSubmit={registrarPaciente} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-                <input required placeholder="Nombre Completo" value={nuevoPaciente.nombre} onChange={e=>setNuevoPaciente({...nuevoPaciente, nombre: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
-                <input placeholder="Teléfono" value={nuevoPaciente.telefono} onChange={e=>setNuevoPaciente({...nuevoPaciente, telefono: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
-                <input placeholder="Alergias (Ej. Penicilina)" value={nuevoPaciente.alergias} onChange={e=>setNuevoPaciente({...nuevoPaciente, alergias: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium text-red-600"/>
-                <textarea placeholder="Historial Médico y Observaciones" value={nuevoPaciente.historial} onChange={e=>setNuevoPaciente({...nuevoPaciente, historial: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium h-32"></textarea>
-                <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-blue-600 transition shadow-md">Crear Expediente</button>
-              </form>
+              {editando ? (
+                <>
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-3xl font-black text-blue-600">Editar Expediente</h2>
+                    <button onClick={()=>{setEditando(false); setPacienteActivo(null)}} className="text-slate-400 hover:text-red-500 font-bold transition">✖ Cancelar</button>
+                  </div>
+                  <form onSubmit={guardarEdicionPaciente} className="bg-white p-8 rounded-3xl shadow-sm border border-blue-200 space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-2 bg-blue-500"></div>
+                    <input required placeholder="Nombre Completo" value={datosEdicion.nombre} onChange={e=>setDatosEdicion({...datosEdicion, nombre: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
+                    <input placeholder="Teléfono" value={datosEdicion.telefono} onChange={e=>setDatosEdicion({...datosEdicion, telefono: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
+                    <input placeholder="Alergias (Ej. Penicilina)" value={datosEdicion.alergias} onChange={e=>setDatosEdicion({...datosEdicion, alergias: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium text-red-600"/>
+                    <textarea placeholder="Historial Médico y Observaciones" value={datosEdicion.historial} onChange={e=>setDatosEdicion({...datosEdicion, historial: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium h-32"></textarea>
+                    <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition shadow-md">💾 Guardar Cambios</button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-3xl font-black text-slate-900 mb-6">Nuevo Expediente</h2>
+                  <form onSubmit={registrarPaciente} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+                    <input required placeholder="Nombre Completo" value={nuevoPaciente.nombre} onChange={e=>setNuevoPaciente({...nuevoPaciente, nombre: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
+                    <input placeholder="Teléfono" value={nuevoPaciente.telefono} onChange={e=>setNuevoPaciente({...nuevoPaciente, telefono: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium"/>
+                    <input placeholder="Alergias (Ej. Penicilina)" value={nuevoPaciente.alergias} onChange={e=>setNuevoPaciente({...nuevoPaciente, alergias: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium text-red-600"/>
+                    <textarea placeholder="Historial Médico y Observaciones" value={nuevoPaciente.historial} onChange={e=>setNuevoPaciente({...nuevoPaciente, historial: e.target.value})} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 font-medium h-32"></textarea>
+                    <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition shadow-md">Crear Expediente</button>
+                  </form>
+                </>
+              )}
             </div>
-            
+
             <div>
-              <h2 className="text-3xl font-black text-slate-900 mb-6">Subir Archivos Clínicos</h2>
+              <h2 className="text-3xl font-black text-slate-900 mb-6">Buscador y Archivos</h2>
               <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
                 <label className="block text-sm font-bold text-slate-700 mb-2">1. Seleccionar Paciente</label>
-                <select onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold mb-6 cursor-pointer focus:border-blue-600">
+                <select value={pacienteActivo?.id || ""} onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold mb-6 cursor-pointer focus:border-blue-600">
                   <option value="">Seleccione un paciente de la lista...</option>
                   {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre_completo}</option>)}
                 </select>
+
+                {pacienteActivo && !editando && (
+                  <button onClick={activarEdicion} className="w-full bg-slate-100 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-200 transition mb-6 border border-slate-200 shadow-sm">
+                    ✏️ Editar datos de {pacienteActivo.nombre_completo}
+                  </button>
+                )}
 
                 {pacienteActivo && (
                   <div className="p-8 border-2 border-dashed border-slate-300 rounded-2xl text-center bg-slate-50 hover:bg-blue-50 transition">
                     <p className="font-bold text-slate-600 mb-4">Anexar Radiografía/Foto para <br/><span className="text-blue-600 text-lg">{pacienteActivo.nombre_completo}</span></p>
                     <input type="file" onChange={(e) => setArchivo(e.target.files?.[0] || null)} className="mb-6 block w-full text-slate-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"/>
-                    <button onClick={subirRadiografia} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition shadow-md">Subir al Expediente Nube</button>
+                    <button onClick={subirRadiografia} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition shadow-md">☁️ Subir al Expediente Nube</button>
                   </div>
                 )}
               </div>
@@ -173,9 +231,8 @@ export default function AdminDashboard() {
           <div className="max-w-5xl">
             <h2 className="text-3xl font-black text-slate-900 mb-6">Odontograma Interactivo</h2>
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-slate-200">
-              
               <div className="flex flex-col md:flex-row gap-6 items-center justify-between mb-10 pb-6 border-b border-slate-100">
-                <select onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full md:w-1/2 p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold cursor-pointer focus:border-blue-600">
+                <select value={pacienteActivo?.id || ""} onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full md:w-1/2 p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold cursor-pointer focus:border-blue-600">
                   <option value="">1. Buscar y seleccionar paciente...</option>
                   {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre_completo}</option>)}
                 </select>
