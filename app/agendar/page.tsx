@@ -4,14 +4,22 @@ import { supabase } from "../../lib/supabase"
 import Link from "next/link"
 
 export default function Agendar() {
+  const [nombre, setNombre] = useState("")
+  const [telefono, setTelefono] = useState("")
   const [motivo, setMotivo] = useState("")
   const [fecha, setFecha] = useState("")
   const [mensaje, setMensaje] = useState("")
 
   const agendarCita = async (e: any) => {
     e.preventDefault()
-    const { error } = await supabase.from("citas").insert([{ motivo, fecha_hora: fecha, estado: "pendiente" }])
-    if (error) setMensaje("Error al agendar. Contacta soporte.")
+    const { error } = await supabase.from("citas").insert([{ 
+      nombre_paciente: nombre, 
+      telefono: telefono, 
+      motivo, 
+      fecha_hora: fecha, 
+      estado: "pendiente" 
+    }])
+    if (error) setMensaje("Error al agendar. Intenta de nuevo.")
     else setMensaje("✅ ¡Cita solicitada con éxito! Te contactaremos pronto.")
   }
 
@@ -20,12 +28,25 @@ export default function Agendar() {
       <Link href="/" className="absolute top-8 left-8 text-slate-500 font-bold hover:text-blue-600 transition flex items-center gap-2">← Regresar</Link>
       <form onSubmit={agendarCita} className="bg-white p-10 rounded-[2rem] shadow-2xl w-full max-w-lg border border-slate-100">
         <h1 className="text-4xl font-black mb-2 text-center text-slate-900">Reserva tu Cita</h1>
-        <p className="text-center text-slate-500 mb-8 font-medium">Selecciona el tratamiento y horario de tu preferencia.</p>
+        <p className="text-center text-slate-500 mb-8 font-medium">Déjanos tus datos y el tratamiento que necesitas.</p>
+        
         {mensaje && <div className="mb-8 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl font-bold text-center">{mensaje}</div>}
+        
         <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Tu Nombre</label>
+              <input required type="text" placeholder="Ej. Juan Pérez" onChange={(e)=>setNombre(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white text-slate-900 font-medium focus:border-blue-600 outline-none transition"/>
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Tu Teléfono</label>
+              <input required type="tel" placeholder="Ej. 7000-0000" onChange={(e)=>setTelefono(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white text-slate-900 font-medium focus:border-blue-600 outline-none transition"/>
+            </div>
+          </div>
+          
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Tratamiento Requerido</label>
-            <select required onChange={(e)=>setMotivo(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white text-slate-900 font-medium focus:border-blue-600 focus:ring-0 outline-none transition cursor-pointer">
+            <select required onChange={(e)=>setMotivo(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white text-slate-900 font-medium focus:border-blue-600 outline-none transition cursor-pointer">
               <option value="">Selecciona una opción...</option>
               <option value="Limpieza Dental Especializada">Limpieza Dental Especializada</option>
               <option value="Evaluación General / Diagnóstico">Evaluación General / Diagnóstico</option>
@@ -35,8 +56,9 @@ export default function Agendar() {
           </div>
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Fecha y Hora</label>
-            <input required type="datetime-local" onChange={(e)=>setFecha(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white text-slate-900 font-medium focus:border-blue-600 focus:ring-0 outline-none transition"/>
+            <input required type="datetime-local" onChange={(e)=>setFecha(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white text-slate-900 font-medium focus:border-blue-600 outline-none transition"/>
           </div>
+          
           <button type="submit" className="w-full bg-slate-900 text-white font-bold text-lg py-5 rounded-xl hover:bg-blue-600 transition-colors shadow-lg mt-4">Confirmar Reservación</button>
         </div>
       </form>

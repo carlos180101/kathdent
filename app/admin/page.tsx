@@ -78,6 +78,8 @@ export default function AdminDashboard() {
     else { alert("¡Imagen anexada al expediente!"); setArchivo(null); }
   }
 
+  const eliminarCita = async (id: string) => { if(confirm('¿Borrar esta cita permanentemente?')) { await supabase.from('citas').delete().eq('id', id); cargarDatos() } }
+
   const actualizarEstadoCita = async (id: string, nuevoEstado: string) => {
     await supabase.from("citas").update({ estado: nuevoEstado }).eq("id", id)
     cargarDatos()
@@ -117,7 +119,7 @@ export default function AdminDashboard() {
               {citas.length === 0 ? <p className="text-slate-500 font-medium">No hay citas registradas aún.</p> : citas.map(cita => (
                 <div key={cita.id} className="flex justify-between items-center p-6 border border-slate-100 hover:bg-slate-50 transition rounded-2xl">
                   <div>
-                    <p className="font-bold text-lg text-slate-900">{new Date(cita.fecha_hora).toLocaleString()}</p>
+                    <p className="font-black text-xl text-slate-900">{cita.nombre_paciente || 'Paciente Sin Nombre'} <span className="text-sm font-medium text-slate-500 ml-2">📞 {cita.telefono || 'Sin Tel.'}</span></p><p className="font-bold text-md text-slate-700 mt-2">🗓️ {new Date(cita.fecha_hora).toLocaleString()}</p>
                     <p className="text-slate-600 font-medium mt-1">Tratamiento: <span className="text-blue-600 font-bold">{cita.motivo}</span></p>
                     <span className={`text-xs font-black uppercase mt-3 inline-block px-3 py-1 rounded-full ${cita.estado === 'pendiente' ? 'bg-amber-100 text-amber-700' : cita.estado === 'confirmada' ? 'bg-emerald-100 text-emerald-700' : cita.estado === 'cancelada' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{cita.estado}</span>
                   </div>
@@ -125,6 +127,7 @@ export default function AdminDashboard() {
                     <button onClick={() => actualizarEstadoCita(cita.id, 'confirmada')} className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-lg font-bold hover:bg-emerald-100 transition">Confirmar</button>
                     <button onClick={() => actualizarEstadoCita(cita.id, 'completada')} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition">Completar</button>
                     <button onClick={() => actualizarEstadoCita(cita.id, 'cancelada')} className="bg-red-50 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-100 transition">Cancelar</button>
+                    <button onClick={() => eliminarCita(cita.id)} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition shadow-md">🗑️ Borrar</button>
                   </div>
                 </div>
               ))}
