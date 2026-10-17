@@ -84,6 +84,7 @@ export default function AdminDashboard() {
     else { setNuevoPago({ concepto: "", monto: "", tipo: "cargo" }); cargarOdontogramaYArchivos(pacienteActivo.id) }
   }
 
+  const activarEdicion = () => setEditando(true)
   const cambiarEstadoDiente = async (diente: number, estado: string) => {
     if (!pacienteActivo) return alert("Selecciona un paciente primero")
     setOdontograma(prev => [...prev.filter(o => o.diente !== diente), { paciente_id: pacienteActivo.id, diente, estado }])
