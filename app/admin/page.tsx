@@ -105,6 +105,7 @@ export default function AdminDashboard() {
   const actualizarEstadoCita = async (id: string, nuevoEstado: string) => { await supabase.from("citas").update({ estado: nuevoEstado }).eq("id", id); cargarDatos() }
   const eliminarCita = async (id: string) => { if(confirm("¿Borrar esta cita permanentemente?")) { await supabase.from("citas").delete().eq("id", id); cargarDatos() } }
 
+  // --- LÓGICA DEL ODONTOGRAMA (5 Caras) ---
   const getDienteData = (diente: number) => {
     const o = odontograma.find(x => x.diente === diente)
     const defaults = { completo: 'sano', oclusal: 'sano', vestibular: 'sano', palatina: 'sano', mesial: 'sano', distal: 'sano' }
@@ -112,6 +113,7 @@ export default function AdminDashboard() {
     try { return { ...defaults, ...JSON.parse(o.estado) } } catch { return { ...defaults, completo: o.estado } }
   }
 
+  // --- LÓGICA DEL PERIODONTOGRAMA (Tabla) ---
   const getPerioData = (diente: number) => {
     const o = odontograma.find(x => x.diente === diente)
     const defaults = {
@@ -216,7 +218,14 @@ export default function AdminDashboard() {
 
   const balanceTotal = pagos.reduce((acc, p) => p.tipo === 'cargo' ? acc + Number(p.monto) : acc - Number(p.monto), 0)
   
-  const esNino = pacienteActivo && pacienteActivo.edad && pacienteActivo.edad < 13
+  const handlePrint = () => {
+    setModoImpresion("expediente"); 
+    setTimeout(() => {
+      window.print();
+      // Intentar forzar la recarga de la página si falla el print, aunque NextJS a veces se marea con window.print() en SPA
+      router.refresh();
+    }, 300);
+  }
 
   return (
     <div className="w-full relative">
@@ -327,6 +336,11 @@ export default function AdminDashboard() {
               <p><span className="font-bold text-slate-500">Teléfono:</span> {pacienteActivo?.telefono || "N/A"}</p>
               <p><span className="font-bold text-slate-500">Dirección:</span> {pacienteActivo?.direccion || "N/A"}</p>
             </div>
+            <div className="mb-8 p-6 bg-slate-50 rounded-xl border border-slate-200">
+              <p className="font-black text-slate-800 mb-2">Historia Médica / Enfermedad Presente:</p>
+              <p className="whitespace-pre-wrap font-medium text-slate-700">{pacienteActivo?.historial_medico}</p>
+              <p className="mt-4"><span className="font-bold text-red-600">Alergias:</span> {pacienteActivo?.alergias || "Ninguna"}</p>
+            </div>
             <div className="mb-8">
               <h3 className="font-black text-xl border-b-2 border-slate-200 pb-2 mb-4 text-slate-800">Estado Odontológico (Hallazgos)</h3>
               {odontograma.length === 0 ? <p className="text-slate-500 text-sm">Sin hallazgos patológicos registrados.</p> : (
@@ -384,6 +398,7 @@ export default function AdminDashboard() {
         </aside>
 
         <main className="flex-1 p-4 md:p-10 overflow-y-auto w-full max-w-full">
+          
           {tab === "citas" && (
              <div className="w-full">
                <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-6 md:mb-8">Control de Citas</h2>
@@ -433,7 +448,7 @@ export default function AdminDashboard() {
                 )}
 
                 {pacienteActivo && !editando && (
-                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border-l-4 border-blue-600">
+                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border-l-4 border-blue-600 animate-fade-in">
                     <h2 className="text-2xl font-black text-slate-900 mb-2">{pacienteActivo.nombre_completo}</h2>
                     <p className="text-slate-600 font-medium">🎂 Edad: {pacienteActivo.edad ? `${pacienteActivo.edad} años` : "N/A"}</p>
                     <p className="text-slate-600 font-medium">📞 Tel: {pacienteActivo.telefono || "N/A"}</p>
@@ -441,14 +456,14 @@ export default function AdminDashboard() {
                     <p className="text-red-600 font-bold mb-6">⚠️ Alergias: {pacienteActivo.alergias || "Ninguna"}</p>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <button onClick={()=>setEditando(true)} className="flex-1 bg-slate-100 text-slate-700 font-bold py-3 px-4 rounded-xl hover:bg-slate-200 border border-slate-200 text-sm">✏️ Editar</button>
-                      <button onClick={() => {setModoImpresion("expediente"); setTimeout(()=>window.print(), 100)}} className="flex-1 bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 shadow-md text-sm">📄 Exportar PDF</button>
+                      <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 shadow-md text-sm">📄 Exportar PDF</button>
                       <button onClick={() => eliminarPaciente(pacienteActivo.id)} className="w-full md:w-auto bg-red-50 text-red-600 font-bold py-3 px-4 rounded-xl hover:bg-red-100 border border-red-200 text-sm">🗑️ Borrar</button>
                     </div>
                   </div>
                 )}
 
                 {pacienteActivo && editando && (
-                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-blue-400">
+                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-blue-400 animate-fade-in">
                     <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-black text-blue-600">Editando Datos</h2><button onClick={()=>setEditando(false)} className="text-slate-400 font-bold text-sm">✖ Cancelar</button></div>
                     <form onSubmit={guardarEdicionPaciente} className="space-y-4">
                       <input required value={datosEdicion.nombre} onChange={e=>setDatosEdicion({...datosEdicion, nombre: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-blue-600 font-medium"/>
@@ -463,149 +478,124 @@ export default function AdminDashboard() {
                     </form>
                   </div>
                 )}
-              </div>
+          </div>
 
-              {pacienteActivo && (
-                <div className="space-y-6">
-                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200">
-                    <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-4">Archivos y Rx</h2>
-                    <div className="p-6 border-2 border-dashed border-slate-300 rounded-2xl text-center hover:bg-blue-50 transition">
-                      <input type="file" onChange={(e) => setArchivo(e.target.files?.[0] || null)} className="mb-4 block w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer text-xs"/>
-                      <button onClick={subirRadiografia} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-md text-sm">☁️ Subir a Nube</button>
-                    </div>
-                  </div>
-                  <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 space-y-4">
-                    <h2 className="text-xl md:text-2xl font-black text-slate-900">Receta Médica</h2>
-                    <textarea value={recetaTexto} onChange={e=>setRecetaTexto(e.target.value)} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 text-sm font-medium h-32" placeholder="Indicaciones..."></textarea>
-                    <button onClick={()=>{setModoImpresion("receta"); setTimeout(()=>window.print(), 100)}} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 shadow-md text-sm">🖨️ Imprimir Receta</button>
-                  </div>
+          {pacienteActivo && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200">
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-4">Archivos y Rx</h2>
+                <div className="p-6 border-2 border-dashed border-slate-300 rounded-2xl text-center hover:bg-blue-50 transition">
+                  <input type="file" onChange={(e) => setArchivo(e.target.files?.[0] || null)} className="mb-4 block w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white cursor-pointer"/>
+                  <button onClick={subirRadiografia} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-md text-sm">☁️ Subir a Nube</button>
                 </div>
-              )}
+              </div>
+              <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 space-y-4">
+                <h2 className="text-xl md:text-2xl font-black text-slate-900">Receta Médica</h2>
+                <textarea value={recetaTexto} onChange={e=>setRecetaTexto(e.target.value)} className="w-full p-3 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none focus:border-blue-600 text-sm font-medium h-32" placeholder="Indicaciones..."></textarea>
+                <button onClick={()=>{setModoImpresion("receta"); setTimeout(()=>window.print(), 100)}} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 shadow-md text-sm">🖨️ Imprimir Receta</button>
+              </div>
             </div>
           )}
+        </div>
+      )}
 
-          {tab === "odontograma" && (
-            <div className="w-full">
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 md:mb-6">Odontograma y Periodontograma</h2>
-              <div className="bg-white p-4 md:p-10 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="flex flex-col gap-4 mb-6 md:mb-10 pb-6 border-b border-slate-100">
-                  <select value={pacienteActivo?.id || ""} onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full p-3 md:p-4 rounded-xl border-2 border-slate-100 bg-slate-50 font-bold focus:border-blue-600">
-                    <option value="">Buscar paciente...</option>
-                    {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre_completo}</option>)}
-                  </select>
+      {tab === "odontograma" && (
+        <div className="w-full">
+          <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 md:mb-6">Odontograma y Periodontograma</h2>
+          <div className="bg-white p-4 md:p-10 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="flex flex-col gap-4 mb-6 md:mb-10 pb-6 border-b border-slate-100">
+              <select value={pacienteActivo?.id || ""} onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full p-3 md:p-4 rounded-xl border-2 border-slate-100 bg-slate-50 font-bold focus:border-blue-600">
+                <option value="">Buscar paciente...</option>
+                {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre_completo}</option>)}
+              </select>
+            </div>
+
+            {pacienteActivo ? (
+              <div className="animate-fade-in w-full overflow-x-auto pb-6">
+                <div className="min-w-[650px] md:min-w-[800px] flex flex-col items-center gap-6 mx-auto">
+                  
+                  {/* VISTA TABLA DEL PERIODONTOGRAMA (SUPERIOR) */}
+                  <div className="w-full border border-slate-200 rounded-lg overflow-hidden bg-slate-50 mb-4">
+                    <div className="bg-emerald-600 text-white font-bold p-2 text-center text-sm tracking-widest uppercase">Perio Superior (V)</div>
+                    <RenderFilaPerio titulo="Bolsa (V)" valorObj="vestibular" field="bolsa" dientes={[18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]} />
+                    <RenderFilaPerio titulo="Recesión (V)" valorObj="vestibular" field="recesion" dientes={[18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]} />
+                    <RenderFilaPerio titulo="Sangrado (V)" valorObj="vestibular" field="sangrado" dientes={[18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]} />
+                  </div>
+
+                  {/* ODONTOGRAMA VISUAL (SIEMPRE VISIBLE) */}
+                  <div className="flex gap-4 md:gap-8 justify-center w-full">
+                    <div className="flex gap-1 md:gap-2">{[18,17,16,15,14,13,12,11].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                    <div className="flex gap-1 md:gap-2">{[21,22,23,24,25,26,27,28].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                  </div>
+                  <div className="flex gap-4 md:gap-8 justify-center w-full">
+                    <div className="flex gap-1 md:gap-2 justify-end w-[280px] md:w-[350px]">{[55,54,53,52,51].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                    <div className="flex gap-1 md:gap-2 justify-start w-[280px] md:w-[350px]">{[61,62,63,64,65].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                  </div>
+                  <div className="flex gap-4 md:gap-8 justify-center w-full">
+                    <div className="flex gap-1 md:gap-2 justify-end w-[280px] md:w-[350px]">{[85,84,83,82,81].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                    <div className="flex gap-1 md:gap-2 justify-start w-[280px] md:w-[350px]">{[71,72,73,74,75].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                  </div>
+                  <div className="flex gap-4 md:gap-8 justify-center w-full">
+                    <div className="flex gap-1 md:gap-2">{[48,47,46,45,44,43,42,41].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                    <div className="flex gap-1 md:gap-2">{[31,32,33,34,35,36,37,38].map(d => <RenderDiente key={d} diente={d} />)}</div>
+                  </div>
+
+                  {/* VISTA TABLA DEL PERIODONTOGRAMA (INFERIOR) */}
+                  <div className="w-full border border-slate-200 rounded-lg overflow-hidden bg-slate-50 mt-4">
+                    <div className="bg-emerald-600 text-white font-bold p-2 text-center text-sm tracking-widest uppercase">Perio Inferior (V)</div>
+                    <RenderFilaPerio titulo="Bolsa (V)" valorObj="vestibular" field="bolsa" dientes={[48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]} />
+                    <RenderFilaPerio titulo="Recesión (V)" valorObj="vestibular" field="recesion" dientes={[48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]} />
+                    <RenderFilaPerio titulo="Sangrado (V)" valorObj="vestibular" field="sangrado" dientes={[48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]} />
+                  </div>
+
                 </div>
-
-                {pacienteActivo ? (
-                  <div className="animate-fade-in w-full overflow-x-auto pb-6">
-                    <div className="min-w-[650px] md:min-w-[800px] flex flex-col items-center gap-6 mx-auto">
-                      
-                      {/* Mostrar Adulto si edad >= 13 o no tiene edad. Mostrar Niño si edad < 13 */}
-                      {(!pacienteActivo.edad || pacienteActivo.edad >= 13) && (
-                        <>
-                          <div className="w-full border border-slate-200 rounded-lg overflow-hidden bg-slate-50 mb-4">
-                            <div className="bg-emerald-600 text-white font-bold p-2 text-center text-sm tracking-widest uppercase">Perio Superior (V)</div>
-                            <RenderFilaPerio titulo="Bolsa (V)" valorObj="vestibular" field="bolsa" dientes={[18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]} />
-                            <RenderFilaPerio titulo="Recesión (V)" valorObj="vestibular" field="recesion" dientes={[18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]} />
-                            <RenderFilaPerio titulo="Sangrado (V)" valorObj="vestibular" field="sangrado" dientes={[18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]} />
-                          </div>
-                          
-                          <div className="flex gap-4 md:gap-8 justify-center w-full">
-                            <div className="flex gap-1 md:gap-2">{[18,17,16,15,14,13,12,11].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                            <div className="flex gap-1 md:gap-2">{[21,22,23,24,25,26,27,28].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                          </div>
-                          
-                          <div className="flex gap-4 md:gap-8 justify-center w-full mt-4">
-                            <div className="flex gap-1 md:gap-2">{[48,47,46,45,44,43,42,41].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                            <div className="flex gap-1 md:gap-2">{[31,32,33,34,35,36,37,38].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                          </div>
-
-                          <div className="w-full border border-slate-200 rounded-lg overflow-hidden bg-slate-50 mt-4">
-                            <div className="bg-emerald-600 text-white font-bold p-2 text-center text-sm tracking-widest uppercase">Perio Inferior (V)</div>
-                            <RenderFilaPerio titulo="Bolsa (V)" valorObj="vestibular" field="bolsa" dientes={[48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]} />
-                            <RenderFilaPerio titulo="Recesión (V)" valorObj="vestibular" field="recesion" dientes={[48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]} />
-                            <RenderFilaPerio titulo="Sangrado (V)" valorObj="vestibular" field="sangrado" dientes={[48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]} />
-                          </div>
-                        </>
-                      )}
-
-                      {(pacienteActivo.edad && pacienteActivo.edad < 13) && (
-                        <>
-                          <h3 className="font-black text-slate-800 text-xl border-b-2 border-slate-200 pb-2 w-full text-center">Dentición Temporal (Niños)</h3>
-                          <div className="flex gap-4 md:gap-8 justify-center w-full">
-                            <div className="flex gap-1 md:gap-2 justify-end w-[280px] md:w-[350px]">{[55,54,53,52,51].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                            <div className="flex gap-1 md:gap-2 justify-start w-[280px] md:w-[350px]">{[61,62,63,64,65].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                          </div>
-                          <div className="flex gap-4 md:gap-8 justify-center w-full mt-4">
-                            <div className="flex gap-1 md:gap-2 justify-end w-[280px] md:w-[350px]">{[85,84,83,82,81].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                            <div className="flex gap-1 md:gap-2 justify-start w-[280px] md:w-[350px]">{[71,72,73,74,75].map(d => <RenderDiente key={d} diente={d} />)}</div>
-                          </div>
-                        </>
-                      )}
-
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-10 md:py-20 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
-                    <p className="text-slate-500 font-medium text-sm md:text-lg">Seleccione un paciente para desplegar la ficha.</p>
-                  </div>
-                )}
               </div>
-            </div>
-          )}
-
-          {tab === "finanzas" && (
-            <div className="w-full">
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 md:mb-6">Estado de Cuenta</h2>
-              <div className="bg-white p-4 md:p-10 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200">
-                <select value={pacienteActivo?.id || ""} onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full p-3 md:p-4 rounded-xl border-2 border-slate-100 bg-slate-50 font-bold focus:border-blue-600 mb-6 md:mb-8 text-sm md:text-base">
-                  <option value="">Seleccione paciente...</option>
-                  {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre_completo}</option>)}
-                </select>
-                {pacienteActivo ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10">
-                    <div>
-                      <div className={`p-4 md:p-6 rounded-2xl mb-6 md:mb-8 text-center ${balanceTotal > 0 ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
-                        <p className="font-bold text-xs uppercase tracking-widest mb-2">Balance a Pagar</p>
-                        <p className="text-4xl md:text-5xl font-black">${Math.max(0, balanceTotal).toFixed(2)}</p>
-                      </div>
-                      <form onSubmit={registrarPago} className="space-y-4 bg-slate-50 p-4 md:p-6 rounded-2xl border border-slate-100">
-                        <div className="flex gap-4 mb-2">
-                          <label className="flex items-center gap-2 font-bold text-slate-600"><input type="radio" name="tipo" checked={nuevoPago.tipo === 'cargo'} onChange={() => setNuevoPago({...nuevoPago, tipo: 'cargo'})}/> Cargo</label>
-                          <label className="flex items-center gap-2 font-bold text-slate-600"><input type="radio" name="tipo" checked={nuevoPago.tipo === 'abono'} onChange={() => setNuevoPago({...nuevoPago, tipo: 'abono'})}/> Abono</label>
-                        </div>
-                        <input required placeholder="Concepto" value={nuevoPago.concepto} onChange={e=>setNuevoPago({...nuevoPago, concepto: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 outline-none"/>
-                        <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden px-4">
-                          <span className="font-black text-slate-400">$</span>
-                          <input required type="number" step="0.01" min="0" value={nuevoPago.monto} onChange={e=>setNuevoPago({...nuevoPago, monto: e.target.value})} className="w-full p-3 outline-none font-black"/>
-                        </div>
-                        <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800">Registrar</button>
-                      </form>
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-800 text-lg md:text-xl mb-4">Historial</h3>
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                        {pagos.length === 0 ? <p className="text-slate-500 font-medium text-sm">Sin registros.</p> : pagos.map(pago => (
-                          <div key={pago.id} className="flex justify-between items-center p-3 border border-slate-100 rounded-xl bg-slate-50">
-                            <div>
-                              <p className="font-bold text-slate-800 text-sm md:text-base">{pago.concepto}</p>
-                              <p className="text-[10px] md:text-xs font-medium text-slate-500">{new Date(pago.fecha).toLocaleDateString()}</p>
-                            </div>
-                            <div className={`font-black text-base md:text-lg ${pago.tipo === 'cargo' ? 'text-red-600' : 'text-emerald-600'}`}>
-                              {pago.tipo === 'cargo' ? '+' : '-'}${Number(pago.monto).toFixed(2)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50"><p className="text-slate-500 font-medium">Seleccione paciente</p></div>
-                )}
+            ) : (
+              <div className="text-center py-10 md:py-20 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                <p className="text-slate-500 font-medium">Seleccione paciente.</p>
               </div>
-            </div>
-          )}
-        </main>
-      </div>
-    </div>
-  )
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "finanzas" && (
+        <div className="w-full">
+          <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 md:mb-6">Estado de Cuenta</h2>
+          <div className="bg-white p-4 md:p-10 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200">
+            <select value={pacienteActivo?.id || ""} onChange={(e) => cargarOdontogramaYArchivos(e.target.value)} className="w-full p-3 md:p-4 rounded-xl border-2 border-slate-100 bg-slate-50 font-bold focus:border-blue-600 mb-6 md:mb-8 text-sm md:text-base">
+              <option value="">Seleccione paciente...</option>
+              {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre_completo}</option>)}
+            </select>
+            {pacienteActivo ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10">
+                <div>
+                  <div className={`p-4 md:p-6 rounded-2xl mb-6 md:mb-8 text-center ${balanceTotal > 0 ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
+                    <p className="font-bold text-xs uppercase tracking-widest mb-2">Balance</p>
+                    <p className="text-4xl md:text-5xl font-black">${Math.max(0, balanceTotal).toFixed(2)}</p>
+                  </div>
+                  <form onSubmit={registrarPago} className="space-y-4 bg-slate-50 p-4 md:p-6 rounded-2xl border border-slate-100">
+                    <div className="flex gap-4 mb-2">
+                      <label className="flex items-center gap-2 font-bold text-slate-600"><input type="radio" name="tipo" checked={nuevoPago.tipo === 'cargo'} onChange={() => setNuevoPago({...nuevoPago, tipo: 'cargo'})}/> Cargo</label>
+                      <label className="flex items-center gap-2 font-bold text-slate-600"><input type="radio" name="tipo" checked={nuevoPago.tipo === 'abono'} onChange={() => setNuevoPago({...nuevoPago, tipo: 'abono'})}/> Abono</label>
+                    </div>
+                    <input required placeholder="Concepto" value={nuevoPago.concepto} onChange={e=>setNuevoPago({...nuevoPago, concepto: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 outline-none"/>
+                    <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden px-4">
+                      <span className="font-black text-slate-400">$</span>
+                      <input required type="number" step="0.01" min="0" value={nuevoPago.monto} onChange={e=>setNuevoPago({...nuevoPago, monto: e.target.value})} className="w-full p-3 outline-none font-black"/>
+                    </div>
+                    <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800">Registrar</button>
+                  </form>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50"><p className="text-slate-500 font-medium">Seleccione paciente</p></div>
+            )}
+          </div>
+        </div>
+      )}
+    </main>
+  </div>
+</div>
+)
 }
